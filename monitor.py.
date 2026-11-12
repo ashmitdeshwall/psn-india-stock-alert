@@ -1,57 +1,24 @@
 
 import os
 import json
-import re
-import time
-import hashlib
-from urllib.parse import urljoin
-
 import requests
+import hashlib
+from datetime import datetime, timezone
 from bs4 import BeautifulSoup
 
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
+# Add verified direct product-page URLs here.
+PRODUCT_URLS = []
+
 STATE_FILE = "stock_state.json"
 
-RETAILERS = {
-    "MD Computers": "https://mdcomputers.in",
-    "PlayAsia": "https://www.play-asia.com",
-    "GamePrex": "https://gameprex.in",
-    "Simply Gaming": "https://www.simplygaming.in",
-    "Hitech Gamez": "https://hitechgamez.in",
-    "GameKart": "https://gamekart.in",
-    "Digistore": "https://digistore.co.in",
-    "E2Z Store": "https://e2zstore.com",
-    "Games The Shop": "https://www.gamestheshop.com",
-    "GYFTR": "https://www.gyftr.com",
-    "Blinkit": "https://blinkit.com",
-    "Rooter": "https://shop.rooter.gg",
-    "JioGames": "https://store.jiogames.com",
-    "NI Store": "https://www.nistore.in",
-    "Sheenu Game Center": "https://sheenugamecenter.com",
-    "HG World": "https://hgworld.in",
-    "Flipkart": "https://www.flipkart.com",
-    "Amazon India": "https://www.amazon.in",
-    "Stan Shop": "https://www.stanshop.co",
-    "KRG Kart": "https://krgkart.com",
-    "E Mart Games": "https://emartgames.in",
-    "UniPin": "https://www.unipin.com",
-    "SWAG": "https://www.swag.gg",
-    "99Gift": "https://99gift.in",
-    "Woohoo": "https://www.woohoo.in",
-    "Blue Vault": "https://www.bluevault.in",
-    "Venus Games": "https://venusgamesandelecs.com",
-}
-
 HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 Chrome/130.0 Safari/537.36"
-    )
+    "User-Agent": "Mozilla/5.0 (compatible; PSNStockMonitor/1.0)"
 }
 
-def send_telegram(message):
+def send_alert(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     response = requests.post(
         url,
@@ -61,107 +28,115 @@ def send_telegram(message):
     response.raise_for_status()
 
 def load_state():
-    if not os.path.exists(STATE_FILE):
-        return {}
     try:
-        with open(STATE_FILE, "r", encoding="utf-8") as file:
-            return json.load(file)
-    except Exception:
+        with open(STATE_FILE, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
 def save_state(state):
-    with open(STATE_FILE, "w", encoding="utf-8") as file:
-        json.dump(state, file, indent=2)
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
 
-def is_psn_india(text):
-    text = text.lower()
+def find_products(data):
+    if isinstance(data, list):
+        for item in data:
+            yield from find_products(item)
 
-    positive = (
-        "playstation", "psn", "ps store", "wallet top up",
-        "wallet top-up", "india", "inr"
+    elif isinstance(data, dict):
+        if data.get("@type") in ("Product", ["Product"]):
+            yield data
+
+        for value in data.values():
+            if isinstance(value, (dict, list)):
+                yield from find_products(value)
+
+def verify_product(product):
+    name = str(product.get("name", "")).lower()
+    description = str(product.get("description", "")).lower()
+
+    text = name + " " + description
+
+    if not any(x in text for x in ("playstation", "psn")):
+        return None
+
+    if any(x in text for x in (
+        "ps plus", "subscription", "steam", "xbox"
+    )):
+        return None
+
+    offers = product.get("offers", {})
+    if isinstance(offers, list):
+        offers = offers[0] if offers else {}
+
+    price = offers.get("price")
+    currency = offers.get("priceCurrency")
+    availability = str(offers.get("availability", "")).lower()
+
+    if not price or currency != "INR":
+        return None
+
+    if not availability.endswith("instock"):
+        return None
+
+    return {
+        "name": product.get("name", "PSN Gift Card"),
+        "price": price
+    }
+
+def check_page(url):
+    response = requests.get(
+        url, headers=HEADERS, timeout=25
     )
+    response.raise_for_status()
 
-    negative = (
-        "ps plus", "playstation plus", "subscription",
-        "game voucher", "steam", "xbox"
-    )
+    soup = BeautifulSoup(response.text, "html.parser")
+    products = []
 
-    return (
-        any(word in text for word in positive)
-        and not any(word in text for word in negative)
-    )
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = json.loads(script.string or script.get_text())
+            products.extend(find_products(data))
+        except (json.JSONDecodeError, TypeError):
+            continue
 
-def get_products(store, base_url):
-    try:
-        response = requests.get(
-            base_url,
-            headers=HEADERS,
-            timeout=20
-        )
-        response.raise_for_status()
-
-        soup = BeautifulSoup(response.text, "html.parser")
-        found = []
-
-        for link in soup.find_all("a", href=True):
-            name = link.get_text(" ", strip=True)
-            href = urljoin(base_url, link["href"])
-
-            if not name or not is_psn_india(name + " " + href):
-                continue
-
-            if href.startswith("http"):
-                found.append({
-                    "store": store,
-                    "name": name[:150],
-                    "url": href
-                })
-
-        return found, "CHECKED"
-
-    except Exception as error:
-        print(f"{store}: SITE_ERROR: {error}")
-        return [], "SITE_ERROR"
-
-def product_id(product):
-    raw = product["store"] + "|" + product["url"]
-    return hashlib.sha256(raw.encode()).hexdigest()
+    return [p for item in products if (p := verify_product(item))]
 
 def main():
     state = load_state()
-    updated_state = dict(state)
 
-    for store, url in RETAILERS.items():
-        print(f"Checking {store}...")
+    if not PRODUCT_URLS:
+        print("No direct product URLs configured.")
+        print("No stock alerts will be generated.")
+        return
 
-        products, status = get_products(store, url)
+    for url in PRODUCT_URLS:
+        try:
+            products = check_page(url)
 
-        if status == "SITE_ERROR":
-            continue
+            for product in products:
+                key = hashlib.sha256(
+                    (url + product["name"]).encode()
+                ).hexdigest()
 
-        for product in products:
-            key = product_id(product)
+                if key not in state:
+                    send_alert(
+                        "PSN India stock candidate\n\n"
+                        f"Product: {product['name']}\n"
+                        f"Price: ₹{product['price']}\n"
+                        f"Link: {url}\n"
+                        f"Checked: {datetime.now(timezone.utc).isoformat()}\n\n"
+                        "Please verify the live product before purchasing."
+                    )
 
-            if key not in state:
-                message = (
-                    "Possible PSN product discovered\n\n"
-                    f"Store: {store}\n"
-                    f"Product: {product['name']}\n"
-                    f"Link: {product['url']}\n\n"
-                    "Please verify India-region compatibility and live stock."
-                )
+                state[key] = True
 
-                send_telegram(message)
-                updated_state[key] = {
-                    "store": store,
-                    "url": product["url"],
-                    "first_seen": int(time.time())
-                }
+            print(f"Checked: {url}")
 
-        time.sleep(2)
+        except Exception as error:
+            print(f"SITE_ERROR: {url}: {error}")
 
-    save_state(updated_state)
-    print("Monitoring run completed.")
+    save_state(state)
 
 if __name__ == "__main__":
     main()
