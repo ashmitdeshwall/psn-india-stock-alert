@@ -1,0 +1,167 @@
+
+import os
+import json
+import re
+import time
+import hashlib
+from urllib.parse import urljoin
+
+import requests
+from bs4 import BeautifulSoup
+
+BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+
+STATE_FILE = "stock_state.json"
+
+RETAILERS = {
+    "MD Computers": "https://mdcomputers.in",
+    "PlayAsia": "https://www.play-asia.com",
+    "GamePrex": "https://gameprex.in",
+    "Simply Gaming": "https://www.simplygaming.in",
+    "Hitech Gamez": "https://hitechgamez.in",
+    "GameKart": "https://gamekart.in",
+    "Digistore": "https://digistore.co.in",
+    "E2Z Store": "https://e2zstore.com",
+    "Games The Shop": "https://www.gamestheshop.com",
+    "GYFTR": "https://www.gyftr.com",
+    "Blinkit": "https://blinkit.com",
+    "Rooter": "https://shop.rooter.gg",
+    "JioGames": "https://store.jiogames.com",
+    "NI Store": "https://www.nistore.in",
+    "Sheenu Game Center": "https://sheenugamecenter.com",
+    "HG World": "https://hgworld.in",
+    "Flipkart": "https://www.flipkart.com",
+    "Amazon India": "https://www.amazon.in",
+    "Stan Shop": "https://www.stanshop.co",
+    "KRG Kart": "https://krgkart.com",
+    "E Mart Games": "https://emartgames.in",
+    "UniPin": "https://www.unipin.com",
+    "SWAG": "https://www.swag.gg",
+    "99Gift": "https://99gift.in",
+    "Woohoo": "https://www.woohoo.in",
+    "Blue Vault": "https://www.bluevault.in",
+    "Venus Games": "https://venusgamesandelecs.com",
+}
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 Chrome/130.0 Safari/537.36"
+    )
+}
+
+def send_telegram(message):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    response = requests.post(
+        url,
+        data={"chat_id": CHAT_ID, "text": message},
+        timeout=20
+    )
+    response.raise_for_status()
+
+def load_state():
+    if not os.path.exists(STATE_FILE):
+        return {}
+    try:
+        with open(STATE_FILE, "r", encoding="utf-8") as file:
+            return json.load(file)
+    except Exception:
+        return {}
+
+def save_state(state):
+    with open(STATE_FILE, "w", encoding="utf-8") as file:
+        json.dump(state, file, indent=2)
+
+def is_psn_india(text):
+    text = text.lower()
+
+    positive = (
+        "playstation", "psn", "ps store", "wallet top up",
+        "wallet top-up", "india", "inr"
+    )
+
+    negative = (
+        "ps plus", "playstation plus", "subscription",
+        "game voucher", "steam", "xbox"
+    )
+
+    return (
+        any(word in text for word in positive)
+        and not any(word in text for word in negative)
+    )
+
+def get_products(store, base_url):
+    try:
+        response = requests.get(
+            base_url,
+            headers=HEADERS,
+            timeout=20
+        )
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        found = []
+
+        for link in soup.find_all("a", href=True):
+            name = link.get_text(" ", strip=True)
+            href = urljoin(base_url, link["href"])
+
+            if not name or not is_psn_india(name + " " + href):
+                continue
+
+            if href.startswith("http"):
+                found.append({
+                    "store": store,
+                    "name": name[:150],
+                    "url": href
+                })
+
+        return found, "CHECKED"
+
+    except Exception as error:
+        print(f"{store}: SITE_ERROR: {error}")
+        return [], "SITE_ERROR"
+
+def product_id(product):
+    raw = product["store"] + "|" + product["url"]
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+def main():
+    state = load_state()
+    updated_state = dict(state)
+
+    for store, url in RETAILERS.items():
+        print(f"Checking {store}...")
+
+        products, status = get_products(store, url)
+
+        if status == "SITE_ERROR":
+            continue
+
+        for product in products:
+            key = product_id(product)
+
+            if key not in state:
+                message = (
+                    "Possible PSN product discovered\n\n"
+                    f"Store: {store}\n"
+                    f"Product: {product['name']}\n"
+                    f"Link: {product['url']}\n\n"
+                    "Please verify India-region compatibility and live stock."
+                )
+
+                send_telegram(message)
+                updated_state[key] = {
+                    "store": store,
+                    "url": product["url"],
+                    "first_seen": int(time.time())
+                }
+
+        time.sleep(2)
+
+    save_state(updated_state)
+    print("Monitoring run completed.")
+
+if __name__ == "__main__":
+    main()
