@@ -35,11 +35,18 @@ jobs:
           find . -maxdepth 3 -type f -print
 
 
+      
       - name: Run PSN monitor
+        working-directory: ${{ github.workspace }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python3 ./monitor.py
+        run: |
+          pwd
+          ls -l "$GITHUB_WORKSPACE/monitor.py"
+          python3 -c "import os; print('File exists:', os.path.isfile('monitor.py'))"
+          python3 -u "$GITHUB_WORKSPACE/monitor.py"
+
 
       - name: Save stock history
         run: |
