@@ -17,8 +17,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: main
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -27,31 +25,17 @@ jobs:
 
       - name: Install libraries
         run: pip install -r requirements.txt
-        
-      - name: Debug repository files
-        run: |
-          pwd
-          ls -la
-          find . -maxdepth 3 -type f -print
 
-
-      
-            - name: Run PSN monitor
-        working-directory: ${{ github.workspace }}
+      - name: Run PSN monitor
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          pwd
-          ls -la
-          python3 -c "import os; print('monitor.py exists:', os.path.isfile('monitor.py'))"
-          python3 -u monitor.py
-
+        run: python monitor.py
 
       - name: Save stock history
         run: |
           git config user.name "PSN Stock Monitor"
           git config user.email "actions@users.noreply.github.com"
-          git add stock_state.json
+          git add -A
           git diff --cached --quiet || git commit -m "Update PSN stock history"
           git push
