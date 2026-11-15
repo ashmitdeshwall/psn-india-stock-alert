@@ -36,15 +36,15 @@ jobs:
 
 
       
-      - name: Run PSN monitor
+            - name: Run PSN monitor
         working-directory: ${{ github.workspace }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           pwd
-          python3 -u ./monitor.py
-          python3 -c "import os; print('File exists:', os.path.isfile('monitor.py'))"
+          ls -la
+          python3 -c "import os; print('monitor.py exists:', os.path.isfile('monitor.py'))"
           python3 -u monitor.py
 
 
