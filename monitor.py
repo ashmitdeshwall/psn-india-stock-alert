@@ -10,7 +10,39 @@ BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
 # Add verified direct product-page URLs here.
-PRODUCT_URLS = []
+
+PRODUCT_URLS = [
+    # 1. Amazon India
+    "https://www.amazon.in/dp/B0C1H473H8",
+
+    # 2. E2Z Store - ₹1,000 and ₹2,000 category
+    "https://e2zstore.com/product-tag/psn-card-india/",
+
+    # E2Z - individual denominations
+    "https://e2zstore.com/product/rs-2000-playstation-network-wallet-top-up/",
+    "https://e2zstore.com/product/rs-3000-playstation-network-wallet-top-up/",
+    "https://e2zstore.com/product/rs-4000-playstation-network-wallet-top-up/",
+
+    # 3. JioGames - ₹2,000
+    "https://www.store.jiogames.com/products/?brand=playstation",
+
+    # 4. Rooter - ₹1,000 to ₹4,000 options
+    "https://shop.rooter.gg/product/playstation-gift-cards",
+
+    # 5. GyFTR - ₹1,000, ₹2,000 and ₹5,000
+    "https://www.gyftr.com/sony-playstation",
+
+    # 6. StanShop - ₹1,000 to ₹4,000 options
+    "https://www.stanshop.co/playstation-psn-gift-card-in-india-4000-inr",
+    "https://www.stanshop.co/playstation-psn-gift-card-in-india-3000-inr",
+
+    # 7. GamesTheShop - ₹5,000
+    "https://www.gamestheshop.com/product/57ffc696-2241-45b1-af43-736209293710",
+    
+    # 8. Woohoo
+    "https://www.woohoo.in/playstation-e-gift-instant-voucher",
+]
+
 
 STATE_FILE = "stock_state.json"
 
