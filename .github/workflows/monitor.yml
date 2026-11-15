@@ -43,7 +43,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           pwd
-          ls -l "$GITHUB_WORKSPACE/monitor.py"
+          python3 -u ./monitor.py
           python3 -c "import os; print('File exists:', os.path.isfile('monitor.py'))"
           python3 -u monitor.py
 
