@@ -139,7 +139,7 @@ def check_page(url):
     return [p for item in products if (p := verify_product(item))]
 
 def main():
-    send_alert() 
+    
     state = load_state()
 
     if not PRODUCT_URLS:
