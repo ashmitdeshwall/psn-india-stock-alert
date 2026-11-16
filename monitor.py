@@ -135,6 +135,7 @@ def check_page(url):
     return [p for item in products if (p := verify_product(item))]
 
 def main():
+    send_alert("✅ PSN BOT TEST: GitHub to Telegram connection is working!")
     state = load_state()
 
     if not PRODUCT_URLS:
