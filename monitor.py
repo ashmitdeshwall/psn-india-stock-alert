@@ -51,13 +51,17 @@ HEADERS = {
 }
 
 def send_alert(message):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot9224443147:AAEX-5kpIBZu4c9qSbyRrfz8UD5hdtI3R_Q/sendMessage"
     response = requests.post(
         url,
         data={"chat_id": CHAT_ID, "text": message},
         timeout=20
     )
-    response.raise_for_status()
+
+    if not response.ok:
+        raise RuntimeError(
+            f"Telegram API error {response.status_code}: {response.text}"
+        )
 
 def load_state():
     try:
